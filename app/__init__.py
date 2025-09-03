@@ -1,25 +1,39 @@
 from flask import Flask
-from flask_sqlalchemy import SQLAlchemy
+from .config import Config
+from .models import db
 from celery import Celery
-import os
+import logging
 
-db = SQLAlchemy()
+celery = Celery(__name__)
 
-def make_celery(app):
-    celery = Celery(app.import_name, backend=app.config['CELERY_RESULT_BACKEND'], broker=app.config['CELERY_BROKER_URL'])
-    celery.conf.update(app.config)
-    return celery
+def init_celery(app: Flask):
+    celery.conf.update(
+        broker_url=app.config["CELERY_BROKER_URL"],
+        result_backend=app.config["CELERY_RESULT_BACKEND"],
+        task_track_started=True
+    )
+    # Registrar tasks após config
+    from .tasks import operation_tasks  # noqa
 
-def create_app():
+def create_app(config_class=Config):
     app = Flask(__name__)
-    app.config.from_object('app.config.Config')
+    app.config.from_object(config_class)
 
     db.init_app(app)
-    celery = make_celery(app)
 
-    from app.api import api as api_blueprint
-    app.register_blueprint(api_blueprint)
+    with app.app_context():
+        db.create_all()
 
-    return app, celery
+    # Logging simples estruturado
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s"
+    )
 
-app, celery = create_app()
+    # Blueprints
+    from .api.routes import api_bp
+    app.register_blueprint(api_bp)
+
+    init_celery(app)
+
+    return app

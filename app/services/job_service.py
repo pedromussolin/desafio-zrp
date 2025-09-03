@@ -1,11 +1,11 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from app.models.job import Job
 from app import db
 
 class JobService:
     @staticmethod
     def create_job():
-        job = Job(status='PENDING', created_at=datetime.utcnow())
+        job = Job(status='PENDING', created_at=datetime.now(timezone.utc))
         db.session.add(job)
         db.session.commit()
         return job
@@ -28,7 +28,7 @@ class JobService:
         if job:
             job.status = status
             if status == 'COMPLETED':
-                job.completed_at = datetime.utcnow()
+                job.completed_at = datetime.now(timezone.utc)
             db.session.commit()
             return job
         return None

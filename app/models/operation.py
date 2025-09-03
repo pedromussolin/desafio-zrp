@@ -1,19 +1,21 @@
-from datetime import datetime
-from sqlalchemy import Column, Integer, String, Float, DateTime
-from app import db
+from datetime import datetime, timezone
+from . import db
 
 class Operation(db.Model):
-    __tablename__ = 'operations'
+    __tablename__ = "operations"
 
-    id = Column(Integer, primary_key=True)
-    asset_code = Column(String(10), nullable=False)
-    operation_type = Column(String(4), nullable=False)  # e.g., 'BUY' or 'SELL'
-    quantity = Column(Float, nullable=False)
-    status = Column(String(20), default='PENDING')  # e.g., 'PENDING', 'COMPLETED', 'FAILED'
-    execution_price = Column(Float, nullable=False)
-    total_value = Column(Float, nullable=False)
-    tax_paid = Column(Float, default=0.0)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    id = db.Column(db.String(50), primary_key=True)
+    fidc_id = db.Column(db.String(40), db.ForeignKey("fidc_cash.fidc_id"), nullable=False)
+    job_id = db.Column(db.String(36), db.ForeignKey("processing_jobs.job_id"), nullable=False)
 
-    def __repr__(self):
-        return f'<Operation {self.id}: {self.operation_type} {self.quantity} of {self.asset_code}>'
+    asset_code = db.Column(db.String(20), nullable=False)
+    operation_type = db.Column(db.String(4), nullable=False)  # BUY|SELL
+    quantity = db.Column(db.Integer, nullable=False)
+    operation_date = db.Column(db.Date, nullable=False)
+
+    status = db.Column(db.String(20), default="PENDING")  # PENDING|PROCESSING|COMPLETED|FAILED
+    execution_price = db.Column(db.Float, nullable=True)
+    total_value = db.Column(db.Float, nullable=True)
+    tax_paid = db.Column(db.Float, nullable=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.now(timezone.utc))
