@@ -83,5 +83,8 @@ def export_ops():
     if errors:
         return jsonify({"errors": errors}), 400
     result = export_operations(payload["fidc_id"], payload["start_date"], payload["end_date"])
-    # Para agora retornamos inline (futuramente enviaremos para S3/MinIO)
-    return jsonify({"filename": result["filename"], "bytes": result["bytes"]})
+    return jsonify({
+        "filename": result["filename"],
+        "rows": result["rows"],
+        "download_url": result["url"]
+    })

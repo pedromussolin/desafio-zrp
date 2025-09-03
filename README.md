@@ -1,4 +1,4 @@
-# FIDC API
+# FIDC Operations API
 
 ## Overview
 The FIDC API is a RESTful service designed for processing FIDC operations. It supports asynchronous processing using Celery, integrates with external price APIs, and provides functionality for operation calculations, job monitoring, and batch exports.
@@ -60,11 +60,29 @@ To start the Celery worker, run:
 celery -A celery_worker worker --loglevel=info
 ```
 
+## Subir stack
+docker compose up --build
+
+API: http://localhost:5000
+MinIO Console: http://localhost:9001 (minioadmin/minioadmin)
+
+## Enfileirar operações
+curl -X POST http://localhost:5000/operations/process -H "Content-Type: application/json" -d "{\"fidc_id\":\"FIDC001\",\"operations\":[{\"id\":\"op_001\",\"asset_code\":\"PETR4\",\"operation_type\":\"BUY\",\"quantity\":1000,\"operation_date\":\"2024-09-01\"}]}"
+
+## Status
+curl http://localhost:5000/jobs/<job_id>/status
+
+## Export
+curl -X POST http://localhost:5000/operations/export -H "Content-Type: application/json" -d "{\"fidc_id\":\"FIDC001\",\"start_date\":\"2024-09-01\",\"end_date\":\"2024-09-30\"}"
+
 ## Testing
 To run the tests, use:
 ```
 pytest
 ```
+
+## Testes
+pytest -q
 
 ## License
 This project is licensed under the MIT License. See the LICENSE file for details.
