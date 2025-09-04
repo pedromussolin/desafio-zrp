@@ -1,10 +1,31 @@
-# Guia Passo a Passo de Teste (Atualizado)
+# Guia Passo a Passo de Teste
 
 Este guia fornece instruções detalhadas para testar o sistema de processamento de operações FIDC.
 
+## 0. PREPARAÇÃO DO AMBIENTE
+
+1. **Clonar o projeto**
+   - Abra o terminal (PowerShell)
+   - Execute:
+     ```powershell
+     git clone <URL_DO_REPOSITORIO>
+     cd desafio-zrp
+     ```
+
+2. **Criar o arquivo .env**
+   - No Windows, abra o terminal (PowerShell) na pasta do projeto
+   - Execute:
+     ```powershell
+     Copy-Item .env.example .env
+     ```
+   - (Opcional) Edite o `.env` para ajustar configurações como caixa inicial, credenciais do banco, etc.
+
+3. **Verifique se o Docker Desktop está instalado e em execução**
+   - Abra o aplicativo Docker Desktop e aguarde até aparecer "Running".
+
 ## 1. EXECUTAR O SISTEMA
 
-Certifique-se de que o Docker está instalado e em execução, então execute:
+Certifique-se de que o "Docker Desktop" está instalado e em execução, então execute:
 
 ```bash
 docker compose down -v        # Limpa qualquer instância anterior
