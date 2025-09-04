@@ -1,260 +1,174 @@
-# Guia Passo a Passo (Pessoa Leiga)
+# Guia Passo a Passo de Teste (Atualizado)
 
-Este guia ensina como subir o sistema, rodar operações e gerar um arquivo de exportação.
-Você só precisa seguir as instruções exatamente como estão.
+Este guia fornece instruções detalhadas para testar o sistema de processamento de operações FIDC.
 
----
+## 1. EXECUTAR O SISTEMA
 
-## 1. O QUE VOCÊ VAI USAR
+Certifique-se de que o Docker está instalado e em execução, então execute:
 
-- Aplicativo "Docker Desktop" (já instalado)
-- Navegador (Chrome, Edge ou similar)
-- Visual Studio Code (VS Code)
-- Terminal (PowerShell no Windows)
-- (Opcional) Postman para testar requisições. Se não tiver, usaremos comandos prontos.
-
----
-
-## 2. ABRIR O PROJETO
-
-1. Abra o Visual Studio Code.
-2. Clique em "File" > "Open Folder".
-3. Selecione a pasta:
-   c:\Users\PedroHenriqueMussoli\Documents\Projetos\Desafio_ZRP\desafio-zrp
-
----
-
-## 3. CONFERIR SE O DOCKER ESTÁ LIGADO
-
-1. Abra o aplicativo "Docker Desktop".
-2. Aguarde até aparecer “Running” ou um ícone verde.
-3. Não feche o Docker enquanto testa.
-
----
-
-## 4. CRIAR O ARQUIVO .env
-
-1. No VS Code, no Explorador (sidebar à esquerda) localize o arquivo: `.env.example`.
-2. Clique com o botão direito nele e escolha: "Copy".
-3. Clique em uma área vazia e selecione "Paste".
-4. Renomeie o arquivo copiado para: `.env`
-   (Se o Windows perguntar sobre extensões, confirme.)
-
-Não altere nada dentro do arquivo por enquanto.
-
----
-
-## 5. SUBIR O SISTEMA (TODOS OS SERVIÇOS)
-
-1. Abra o Terminal do VS Code:
-   Menu "Terminal" > "New Terminal".
-2. Verifique se o caminho atual é a pasta do projeto (deve mostrar ...\desafio-zrp).
-3. Digite (ou copie e cole) e pressione Enter:
-
-```
-docker compose up --build
+```bash
+docker compose down -v        # Limpa qualquer instância anterior
+docker compose build --no-cache  # Reconstrói os containers
+docker compose up             # Inicia todos os serviços
 ```
 
-4. Espere. A primeira vez pode demorar (download de imagens).
-5. Aguarde até ver mensagens como:
-   - “Application running on http://0.0.0.0:5000”
-   - Worker Celery com linhas contendo “ready” ou tarefas sendo executadas.
+Aguarde até ver mensagens indicando que todos os serviços estão rodando:
+- API: "Running on http://0.0.0.0:5000"
+- Worker: "celery@xxxx ready"
+- MinIO e banco de dados também inicializados
 
-Não feche este terminal enquanto testar.
+## 2. TESTAR ENDPOINT DE STATUS
 
----
+Este é um teste simples para verificar se a API está respondendo:
 
-## 6. ABRIR UMA NOVA JANELA PARA TESTAR COMANDOS
-
-1. No VS Code abra um novo terminal:
-   Terminal > New Terminal.
-2. Este novo terminal será usado para enviar comandos (sem parar os containers).
-
----
-
-## 7. TESTAR SE A API ESTÁ NO AR
-
-No novo terminal digite:
-
-```
-curl http://localhost:5000/jobs/testando/status
+```bash
+curl http://localhost:5000/jobs/test/status
 ```
 
-Resposta esperada (parecido com):
+Você deve ver uma resposta JSON com status "ok" e um timestamp.
 
-```
-{"error":"Job not found"}
-```
+## 3. ENVIAR OPERAÇÕES PARA PROCESSAMENTO
 
-Se apareceu algo assim, a API está funcionando.
+Envie algumas operações de compra e venda para processamento:
 
----
-
-## 8. CRIAR UM CONJUNTO DE OPERAÇÕES (PROCESSO 1)
-
-Envie uma operação simples (compra):
-
-```
-curl -X POST http://localhost:5000/operations/process ^
-  -H "Content-Type: application/json" ^
-  -d "{\"fidc_id\":\"FIDC001\",\"operations\":[{\"id\":\"op_001\",\"asset_code\":\"PETR4\",\"operation_type\":\"BUY\",\"quantity\":1000,\"operation_date\":\"2024-09-01\"}]}"
-```
-
-Resposta esperada:
-
-```
-{"job_id":"<um código grande aqui>","status":"ENQUEUED"}
-```
-
-Copie o valor de job_id (sem aspas).
-
----
-
-## 9. CONSULTAR STATUS DO PROCESSAMENTO
-
-Troque abaixo <JOB_ID_AQUI> pelo que você copiou:
-
-```
-curl http://localhost:5000/jobs/<JOB_ID_AQUI>/status
+```bash
+curl -X POST http://localhost:5000/operations/process \
+  -H "Content-Type: application/json" \
+  -d '{
+    "fidc_id": "FIDC001",
+    "operations": [
+      {
+        "id": "op_001",
+        "asset_code": "PETR4",
+        "operation_type": "BUY",
+        "quantity": 1000,
+        "operation_date": "2025-09-01"
+      },
+      {
+        "id": "op_002",
+        "asset_code": "VALE3",
+        "operation_type": "SELL",
+        "quantity": 500,
+        "operation_date": "2025-09-01"
+      }
+    ]
+  }'
 ```
 
-Enquanto processa pode aparecer:
+A resposta incluirá um `job_id` que você usará para acompanhar o status do processamento.
 
-```
-{"job_id":"...","status":"PROCESSING","total_operations":1,"processed":0,"failed":0,"estimated_completion":null}
-```
+## 4. VERIFICAR STATUS DO JOB
 
-Depois de alguns segundos:
+Use o ID do job retornado para verificar o status:
 
-```
-{"job_id":"...","status":"COMPLETED","total_operations":1,"processed":1,"failed":0,"estimated_completion":null}
+```bash
+curl http://localhost:5000/jobs/SEU_JOB_ID_AQUI/status
 ```
 
----
+O status será atualizado à medida que as operações são processadas:
+- PROCESSING: ainda em processamento
+- COMPLETED: todas as operações foram processadas
 
-## 10. ENVIAR UM LOTE MAIOR (COM COMPRA E VENDA)
+Você também verá estatísticas como o número de operações processadas e com falha.
 
-```
-curl -X POST http://localhost:5000/operations/process ^
-  -H "Content-Type: application/json" ^
-  -d "{\"fidc_id\":\"FIDC001\",\"operations\":[
-    {\"id\":\"op_002\",\"asset_code\":\"VALE3\",\"operation_type\":\"BUY\",\"quantity\":500,\"operation_date\":\"2024-09-02\"},
-    {\"id\":\"op_003\",\"asset_code\":\"PETR4\",\"operation_type\":\"SELL\",\"quantity\":300,\"operation_date\":\"2024-09-02\"},
-    {\"id\":\"op_004\",\"asset_code\":\"ITUB4\",\"operation_type\":\"BUY\",\"quantity\":200,\"operation_date\":\"2024-09-03\"}
-  ]}"
-```
+## 5. ENVIAR MAIS OPERAÇÕES (OPCIONAL)
 
-Guarde o job_id retornado e acompanhe como antes.
+Você pode enviar mais operações para o mesmo FIDC:
 
----
-
-## 11. VERIFICAR O DINHEIRO DO FUNDO (OPCIONAL)
-
-1. No terminal digite:
-
-```
-docker compose exec db psql -U fidc -d fidc -c "select fidc_id, available_cash from fidc_cash;"
-```
-
-2. Deve mostrar uma linha com FIDC001 e um valor ajustado (diminui após BUY, aumenta após SELL).
-
----
-
-## 12. GERAR EXPORTAÇÃO (CRIAR ARQUIVO NO MINIO)
-
-Quando as operações tiverem status COMPLETED:
-
-```
-curl -X POST http://localhost:5000/operations/export ^
-  -H "Content-Type: application/json" ^
-  -d "{\"fidc_id\":\"FIDC001\",\"start_date\":\"2025-09-03\",\"end_date\":\"2025-09-03\"}"
+```bash
+curl -X POST http://localhost:5000/operations/process \
+  -H "Content-Type: application/json" \
+  -d '{
+    "fidc_id": "FIDC001",
+    "operations": [
+      {
+        "id": "op_003",
+        "asset_code": "ITUB4",
+        "operation_type": "BUY",
+        "quantity": 2000,
+        "operation_date": "2025-09-02"
+      },
+      {
+        "id": "op_004",
+        "asset_code": "MGLU3",
+        "operation_type": "SELL",
+        "quantity": 3000,
+        "operation_date": "2025-09-02"
+      }
+    ]
+  }'
 ```
 
-Resposta esperada (exemplo):
+## 6. EXPORTAR OPERAÇÕES PARA CSV
 
-```
-{
-  "filename":"FIDC001/export_FIDC001_20240901T153000.csv",
-  "rows":4,
-  "download_url":"http://localhost:9000/fidc-exports/FIDC001/export_FIDC001_20240901T153000.csv?X-Amz-Algorithm=..."
-}
-```
+Quando as operações tiverem sido processadas, você pode exportá-las para CSV:
 
-Copie o link de download (download_url) e abra no navegador para baixar o CSV.
-
----
-
-## 13. ABRIR O CONSOLE DO MINIO (ARQUIVOS)
-
-1. Abra no navegador:
-   http://localhost:9001
-2. Login:
-   Usuário: minioadmin
-   Senha: minioadmin
-3. Clique no bucket: fidc-exports
-4. Abra a pasta FIDC001 e veja o arquivo exportado (CSV).
-
----
-
-## 14. RODAR TESTES AUTOMÁTICOS (OPCIONAL)
-
-No terminal:
-
-```
-docker compose run --rm api pytest -q
+```bash
+curl -X POST http://localhost:5000/operations/export \
+  -H "Content-Type: application/json" \
+  -d '{
+    "fidc_id": "FIDC001",
+    "start_date": "2025-09-01",
+    "end_date": "2025-09-30"
+  }'
 ```
 
-Se aparecer algo como "1 passed", está ok.
+A resposta incluirá uma URL para baixar o arquivo CSV.
 
----
+## 7. BAIXAR O ARQUIVO EXPORTADO
 
-## 15. SE ACONTECER ALGUM ERRO
+### Opção 1: Interface Web do MinIO
+
+1. Abra o navegador e acesse: http://localhost:9001
+2. Faça login com:
+   - Username: minioadmin
+   - Password: minioadmin
+3. Navegue até o bucket "fidc-exports"
+4. Encontre a pasta com o ID do seu FIDC (ex: "FIDC001")
+5. Clique no arquivo CSV para baixá-lo
+
+### Opção 2: URL Direta (Navegador)
+
+Acesse a URL retornada pela API no passo anterior em seu navegador. Certifique-se de substituir "minio:9000" por "localhost:9000" se necessário.
+
+## 8. VERIFICAR LOGS EM CASO DE PROBLEMAS
+
+Se algo não funcionar como esperado, verifique os logs:
+
+```bash
+# Ver logs da API
+docker compose logs api
+
+# Ver logs do worker
+docker compose logs worker
+
+# Ver logs contínuos (seguir)
+docker compose logs -f
+```
+
+## SOLUÇÃO DE PROBLEMAS COMUNS
 
 | Situação | O que fazer |
 |----------|-------------|
-| API não responde | Ver se docker compose up ainda está rodando |
-| Erro de “rate limit” | Só esperar e consultar status novamente |
-| Job não sai de PROCESSING | Ver logs: `docker compose logs -f worker` |
-| Link de download não abre | Ver se MinIO está no ar (http://localhost:9001) |
-| Arquivo não aparece | Confirmar que operações foram COMPLETED antes do export |
+| API não responde | Verifique se o docker compose up ainda está rodando |
+| Erro de "rate limit" | Aguarde e consulte o status novamente (simulamos limitação de API) |
+| Job não sai de PROCESSING | Verifique os logs: `docker compose logs -f worker` |
+| Link de download não abre | Verifique se o MinIO está no ar (http://localhost:9001) |
+| Arquivo não aparece | Confirme que as operações foram COMPLETED antes do export |
 
----
+## LIMPAR TUDO AO FINAL
 
-## 16. LIMPAR TUDO AO FINAL
+Para desligar todos os serviços e remover volumes:
 
-Se quiser desligar tudo e remover volumes:
-
-```
-Ctrl + C (no terminal onde está rodando)
+```bash
+# Pressione Ctrl + C no terminal onde está rodando
 docker compose down -v
 ```
 
----
+## RESUMO RÁPIDO
 
-## 17. RESUMO RÁPIDO
-
-1. docker compose up --build
+1. `docker compose up`
 2. Enviar POST /operations/process
 3. Acompanhar GET /jobs/<id>/status
 4. Fazer export /operations/export
-5. Baixar arquivo no link ou via console MinIO
-
-Pronto.
-
----
-
-## 18. PROBLEMAS COMUNS
-
-| Mensagem / Sintoma | Causa | Solução |
-|--------------------|-------|---------|
-| /wait-db.sh: nc: not found | netcat não instalado | Rebuild após ajustar Dockerfile (ver correção) |
-| Fica em "Aguardando Postgres..." | Banco ainda iniciando | Aguardar alguns segundos |
-| Connection refused Redis | Redis não subiu | docker compose logs redis |
-| Rate limit exceeded | Muitas requisições de preço no minuto | Aguardar 60s e consultar status novamente |
-| Job parado em PROCESSING | Retries em andamento | Ver logs do worker |
-| Export sem linhas | Operações não COMPLETED | Conferir status das operações pelo job |
-
-Rebuild completo:
-1. docker compose down
-2. docker compose build --no-cache
-3. docker compose up
+5. Baixar arquivo via console MinIO (http://localhost:9001)
