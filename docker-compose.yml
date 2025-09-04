@@ -6,13 +6,13 @@ services:
       POSTGRES_USER: fidc
       POSTGRES_PASSWORD: fidc
       POSTGRES_DB: fidc
-    ports:
-      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U fidc"]
       interval: 5s
       timeout: 5s
       retries: 10
+    ports:
+      - "5432:5432"
 
   redis:
     image: redis:7
@@ -33,15 +33,12 @@ services:
 
   api:
     build: .
-    command: ["sh","-c","/wait-db.sh db python run.py"]
-    env_file: .env.example
+    command: ["/wait-for-db.sh", "python", "run.py"]
+    env_file: .env
     depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_started
-      minio:
-        condition: service_started
+      - db
+      - redis
+      - minio
     ports:
       - "5000:5000"
     volumes:
@@ -49,15 +46,12 @@ services:
 
   worker:
     build: .
-    command: ["sh","-c","/wait-db.sh db celery -A celery_worker.celery worker --loglevel=info"]
-    env_file: .env.example
+    command: ["/wait-for-db.sh", "celery", "-A", "celery_worker.celery", "worker", "--loglevel=info"]
+    env_file: .env
     depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_started
-      api:
-        condition: service_started
+      - db
+      - redis
+      - api
     volumes:
       - ./:/app
 

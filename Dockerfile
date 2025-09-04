@@ -5,15 +5,19 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y build-essential libpq-dev && rm -rf /var/lib/apt/lists/*
+# Instalar dependências (incluindo netcat para o script wait)
+RUN apt-get update && \
+    apt-get install -y build-essential libpq-dev netcat-openbsd && \
+    rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Script simples wait
-RUN printf '#!/bin/sh\nset -e\nhost=$1\nshift\nuntil nc -z $host 5432; do echo "Aguardando Postgres..."; sleep 2; done\nexec "$@"\n' > /wait-db.sh && chmod +x /wait-db.sh
+# Script simples para esperar pelo PostgreSQL
+RUN echo '#!/bin/bash\necho "Aguardando Postgres em db:5432..."\nuntil nc -z db 5432; do sleep 2; done\necho "Postgres está pronto!"\nexec "$@"' > /wait-for-db.sh && \
+    chmod +x /wait-for-db.sh
 
 EXPOSE 5000
 

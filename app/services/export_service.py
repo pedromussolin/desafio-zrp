@@ -4,8 +4,8 @@ from datetime import datetime, timezone
 from minio import Minio
 from minio.error import S3Error
 from flask import current_app
-from ..models import db
-from ..models.operation import Operation
+from app.models import db
+from app.models.operation import Operation
 import logging
 
 logger = logging.getLogger(__name__)

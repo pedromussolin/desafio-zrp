@@ -1,7 +1,6 @@
 from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, DateTime
-from app import db
-from . import db
+from app.models import db
 
 class Job(db.Model):
     __tablename__ = 'jobs'

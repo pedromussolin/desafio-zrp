@@ -4,6 +4,11 @@ from .models import db
 from celery import Celery
 import logging
 
+# Importar modelos - DEPOIS da importação de db para evitar circular imports
+from .models.operation import Operation
+from .models.job import ProcessingJob
+from .models.fidc_cash import FidcCash
+
 celery = Celery(__name__)
 
 def init_celery(app: Flask):

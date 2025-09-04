@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from . import db
+from app.models import db
 
 class Operation(db.Model):
     __tablename__ = "operations"

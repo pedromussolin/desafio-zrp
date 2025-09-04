@@ -242,3 +242,19 @@ docker compose down -v
 Pronto.
 
 ---
+
+## 18. PROBLEMAS COMUNS
+
+| Mensagem / Sintoma | Causa | Solução |
+|--------------------|-------|---------|
+| /wait-db.sh: nc: not found | netcat não instalado | Rebuild após ajustar Dockerfile (ver correção) |
+| Fica em "Aguardando Postgres..." | Banco ainda iniciando | Aguardar alguns segundos |
+| Connection refused Redis | Redis não subiu | docker compose logs redis |
+| Rate limit exceeded | Muitas requisições de preço no minuto | Aguardar 60s e consultar status novamente |
+| Job parado em PROCESSING | Retries em andamento | Ver logs do worker |
+| Export sem linhas | Operações não COMPLETED | Conferir status das operações pelo job |
+
+Rebuild completo:
+1. docker compose down
+2. docker compose build --no-cache
+3. docker compose up
