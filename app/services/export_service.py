@@ -31,6 +31,8 @@ def export_operations(fidc_id, start_date, end_date):
         Operation.status == "COMPLETED"
     ).all()
 
+    logger.info(f"Found {len(operations)} operations to export")
+
     # Create CSV in memory
     output = io.StringIO()
     writer = csv.writer(output)
@@ -47,7 +49,7 @@ def export_operations(fidc_id, start_date, end_date):
             op.id,
             op.asset_code,
             op.operation_type,
-            op.operation_date.strftime("%Y-%m-%d"),
+            op.operation_date.strftime("%Y-%m-%d") if op.operation_date else "",
             op.quantity,
             op.execution_price,
             op.total_value,
@@ -64,17 +66,25 @@ def export_operations(fidc_id, start_date, end_date):
 
     # Upload to MinIO
     try:
+        # Get MinIO configuration with fallbacks
+        endpoint = current_app.config.get("MINIO_ENDPOINT", "minio:9000")
+        access_key = current_app.config.get("MINIO_ACCESS_KEY", "minioadmin")
+        secret_key = current_app.config.get("MINIO_SECRET_KEY", "minioadmin")
+        bucket_name = current_app.config.get("MINIO_BUCKET", "fidc-exports")
+
+        logger.info(f"Connecting to MinIO at {endpoint}")
+
         # Connect to MinIO
         minio_client = Minio(
-            current_app.config["MINIO_ENDPOINT"],
-            access_key=current_app.config["MINIO_ACCESS_KEY"],
-            secret_key=current_app.config["MINIO_SECRET_KEY"],
+            endpoint,
+            access_key=access_key,
+            secret_key=secret_key,
             secure=False  # For development (http)
         )
 
         # Make bucket if not exists
-        bucket_name = current_app.config["MINIO_BUCKET"]
         if not minio_client.bucket_exists(bucket_name):
+            logger.info(f"Creating bucket: {bucket_name}")
             minio_client.make_bucket(bucket_name)
 
         # Create object path
@@ -92,12 +102,16 @@ def export_operations(fidc_id, start_date, end_date):
             content_type="text/csv"
         )
 
-        # Generate URL
-        url = f"http://{current_app.config['MINIO_ENDPOINT']}/{bucket_name}/{object_name}"
+        # Generate URLs - one for internal use, one for browser access
+        internal_url = f"http://{endpoint}/{bucket_name}/{object_name}"
+        external_url = f"http://localhost:9000/{bucket_name}/{object_name}"  # Use a porta mapeada no host
 
-        logger.info(f"Exported operations for FIDC {fidc_id} to {url}")
-        return url
+        logger.info(f"Exported operations for FIDC {fidc_id}")
+        logger.info(f"Internal URL: {internal_url}")
+        logger.info(f"Browser URL: {external_url}")
 
-    except S3Error as e:
-        logger.error(f"Error uploading to MinIO: {str(e)}")
-        raise Exception("Failed to upload export file")
+        return external_url
+
+    except Exception as e:
+        logger.error(f"Error exporting to MinIO: {str(e)}")
+        raise Exception(f"Failed to export operations: {str(e)}")

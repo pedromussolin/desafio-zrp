@@ -35,6 +35,11 @@ services:
     build: .
     command: ["/wait-for-db.sh", "python", "run.py"]
     env_file: .env
+    environment:
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - MINIO_BUCKET=fidc-exports
     depends_on:
       - db
       - redis
@@ -48,6 +53,11 @@ services:
     build: .
     command: ["/wait-for-db.sh", "celery", "-A", "celery_worker.celery", "worker", "--loglevel=info"]
     env_file: .env
+    environment:
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - MINIO_BUCKET=fidc-exports
     depends_on:
       - db
       - redis

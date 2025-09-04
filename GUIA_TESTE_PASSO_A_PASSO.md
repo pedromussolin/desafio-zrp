@@ -167,7 +167,7 @@ Quando as operações tiverem status COMPLETED:
 ```
 curl -X POST http://localhost:5000/operations/export ^
   -H "Content-Type: application/json" ^
-  -d "{\"fidc_id\":\"FIDC001\",\"start_date\":\"2024-09-01\",\"end_date\":\"2024-09-30\"}"
+  -d "{\"fidc_id\":\"FIDC001\",\"start_date\":\"2025-09-03\",\"end_date\":\"2025-09-03\"}"
 ```
 
 Resposta esperada (exemplo):

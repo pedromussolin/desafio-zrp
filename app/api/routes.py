@@ -41,7 +41,7 @@ def test_status():
         "timestamp": datetime.utcnow().isoformat()
     })
 
-@api_bp.route("/operations/process", methods=["POST"])
+@api_bp.route('/operations/process', methods=['POST'])
 def process_operations():
     """
     Endpoint to process a batch of operations
@@ -63,6 +63,16 @@ def process_operations():
             estimated_completion=datetime.utcnow()
         )
         db.session.add(job)
+
+        # Verificar se o FIDC existe e criar se não existir
+        fidc = FidcCash.query.get(fidc_id)
+        if not fidc:
+            logger.info(f"Creating new FIDC with ID: {fidc_id}")
+            fidc = FidcCash(
+                fidc_id=fidc_id,
+                available_cash=1_000_000.0  # Valor inicial padrão
+            )
+            db.session.add(fidc)
 
         # Create operations in DB
         op_ids = []
