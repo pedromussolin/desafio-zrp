@@ -1,88 +1,120 @@
 # FIDC Operations API
 
-## Overview
-The FIDC API is a RESTful service designed for processing FIDC operations. It supports asynchronous processing using Celery, integrates with external price APIs, and provides functionality for operation calculations, job monitoring, and batch exports.
+## Visão Geral
+API RESTful para processamento de operações FIDC, com processamento assíncrono (Celery), integração simulada de preços, cálculo de operações, monitoramento de jobs e exportação de dados para MinIO.
 
-## Features
-- **REST API**: Provides endpoints for processing operations, checking job status, and exporting data.
-- **Asynchronous Processing**: Utilizes Celery for handling long-running tasks.
-- **External Price Integration**: Fetches asset prices from external sources.
-- **Operation Calculations**: Calculates operation values based on type (BUY/SELL).
-- **Job Monitoring**: Tracks the status of processing jobs.
-- **Batch Export Functionality**: Exports operation data to a specified bucket.
+## Tecnologias
+- Python, Flask
+- Celery (assíncrono)
+- PostgreSQL
+- Redis
+- MinIO (S3 compatível)
+- Docker e Docker Compose
 
-## Project Structure
+## Estrutura do Projeto
 ```
 ├── app
 │   ├── api
+│   │   ├── __init__.py
+│   │   ├── routes.py
+│   │   ├── schemas.py
+│   │   └── endpoints/
 │   ├── models
+│   │   ├── __init__.py
+│   │   ├── fidc_cash.py
+│   │   ├── job.py
+│   │   ├── operation.py
 │   ├── services
+│   │   ├── calculation_service.py
+│   │   ├── export_service.py
+│   │   ├── job_service.py
+│   │   ├── operation_service.py
+│   │   ├── price_service.py
 │   ├── tasks
+│   │   ├── operation_tasks.py
+│   │   ├── export_tasks.py
 │   └── utils
 ├── migrations
 ├── tests
+│   ├── unit
+│   └── integration
 ├── celery_worker.py
 ├── run.py
 ├── requirements.txt
 ├── .env.example
-├── .gitignore
-└── README.md
+├── .env
+├── docker-compose.yml
+├── Dockerfile
+├── GUIA_TESTE_PASSO_A_PASSO.md
+├── README.md
 ```
 
-## Installation
-1. Clone the repository:
-   ```
-   git clone <repository-url>
-   ```
+## Como Executar
 
-2. Create a virtual environment:
-   ```
-   python -m venv venv
-   source venv/bin/activate  # On Windows use `venv\Scripts\activate`
-   ```
+1. **Configurar ambiente**
+   - Instale Docker Desktop
+   - Copie `.env.example` para `.env` e ajuste se necessário
 
-3. Install the required packages:
+2. **Subir os serviços**
+   ```powershell
+   docker compose build --no-cache
+   docker compose up
    ```
-   pip install -r requirements.txt
-   ```
+   - API: http://localhost:5000
+   - MinIO: http://localhost:9001 (minioadmin/minioadmin)
 
-4. Set up environment variables by copying `.env.example` to `.env` and updating the values as needed.
+## Principais Endpoints
 
-## Running the Application
-To run the Flask application, execute:
+### Processar operações
+```http
+POST /operations/process
 ```
-python run.py
+Payload:
+```json
+{
+  "fidc_id": "FIDC001",
+  "operations": [
+    {
+      "id": "op_001",
+      "asset_code": "PETR4",
+      "operation_type": "BUY",
+      "quantity": 1000,
+      "operation_date": "2024-09-01"
+    }
+  ]
+}
 ```
 
-## Running Celery Worker
-To start the Celery worker, run:
+### Consultar status do job
+```http
+GET /jobs/<job_id>/status
 ```
-celery -A celery_worker worker --loglevel=info
+
+### Exportar operações para CSV (MinIO)
+```http
+POST /operations/export
 ```
-
-## Subir stack
-docker compose up --build
-
-API: http://localhost:5000
-MinIO Console: http://localhost:9001 (minioadmin/minioadmin)
-
-## Enfileirar operações
-curl -X POST http://localhost:5000/operations/process -H "Content-Type: application/json" -d "{\"fidc_id\":\"FIDC001\",\"operations\":[{\"id\":\"op_001\",\"asset_code\":\"PETR4\",\"operation_type\":\"BUY\",\"quantity\":1000,\"operation_date\":\"2024-09-01\"}]}"
-
-## Status
-curl http://localhost:5000/jobs/<job_id>/status
-
-## Export
-curl -X POST http://localhost:5000/operations/export -H "Content-Type: application/json" -d "{\"fidc_id\":\"FIDC001\",\"start_date\":\"2024-09-01\",\"end_date\":\"2024-09-30\"}"
-
-## Testing
-To run the tests, use:
-```
-pytest
+Payload:
+```json
+{
+  "fidc_id": "FIDC001",
+  "start_date": "2024-09-01",
+  "end_date": "2024-09-30"
+}
 ```
 
 ## Testes
-pytest -q
+```powershell
+pytest
+```
 
-## License
-This project is licensed under the MIT License. See the LICENSE file for details.
+## Guia de Teste
+Consulte o arquivo `GUIA_TESTE_PASSO_A_PASSO.md` para um passo a passo detalhado de uso e validação.
+
+## Solução de Problemas
+- Se a URL de download do MinIO vier como `minio:9000`, troque por `localhost:9000` no navegador.
+- Use o console do MinIO para baixar arquivos: http://localhost:9001
+- Consulte logs com `docker compose logs api` ou `docker compose logs worker`
+
+## Licença
+MIT License
