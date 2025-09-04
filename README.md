@@ -115,6 +115,3 @@ Consulte o arquivo `GUIA_TESTE_PASSO_A_PASSO.md` para um passo a passo detalhado
 - Se a URL de download do MinIO vier como `minio:9000`, troque por `localhost:9000` no navegador.
 - Use o console do MinIO para baixar arquivos: http://localhost:9001
 - Consulte logs com `docker compose logs api` ou `docker compose logs worker`
-
-## Licença
-MIT License
