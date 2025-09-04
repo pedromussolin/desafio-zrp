@@ -1,22 +1,28 @@
 from flask import Blueprint, request, jsonify
-from app.services.export_service import export_operations_to_bucket
+from app.services.export_service import export_operations
 from app.models.job import Job
 from app import db
+from datetime import datetime
 
 exports_bp = Blueprint('exports', __name__)
 
 @exports_bp.route('/operations/export', methods=['POST'])
-def export_operations():
+def export_operations_endpoint():
     data = request.get_json()
-    if not data or 'operation_ids' not in data:
-        return jsonify({'error': 'Invalid request, operation_ids required'}), 400
+    if not data or not all(k in data for k in ['fidc_id', 'start_date', 'end_date']):
+        return jsonify({'error': 'Invalid request, fidc_id, start_date and end_date required'}), 400
 
-    operation_ids = data['operation_ids']
-    job = Job(status='pending')
-    db.session.add(job)
-    db.session.commit()
+    fidc_id = data['fidc_id']
+    start_date = datetime.fromisoformat(data['start_date']).date()
+    end_date = datetime.fromisoformat(data['end_date']).date()
 
-    # Trigger the export task asynchronously
-    export_task = export_operations_to_bucket.delay(operation_ids, job.job_id)
-
-    return jsonify({'job_id': job.job_id, 'task_id': export_task.id}), 202
+    # Export operations directly
+    try:
+        result = export_operations(fidc_id, start_date, end_date)
+        return jsonify({
+            "filename": result["filename"],
+            "rows": result["rows"],
+            "download_url": result["url"]
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

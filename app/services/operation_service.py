@@ -6,6 +6,7 @@ from app.models.operation import Operation
 from app.models.fidc_cash import FidcCash
 from app.models.job import ProcessingJob
 from app.services.price_service import get_asset_price, ExternalPriceError, RateLimitError
+from app.services.calculation_service import calculate_operation
 import logging
 
 logger = logging.getLogger(__name__)
@@ -13,78 +14,80 @@ logger = logging.getLogger(__name__)
 class OperationProcessingError(Exception):
     pass
 
-def process_single_operation(op_id: str):
+def process_single_operation(operation_id):
     """
-    Processa uma operação (já persistida em status PENDING).
-    Garante atomicidade via transação.
+    Process a single operation
     """
+    operation = Operation.query.get(operation_id)
+    if not operation:
+        logger.error(f"Operation {operation_id} not found")
+        return
+
+    if operation.status != "PENDING":
+        logger.info(f"Operation {operation_id} not in PENDING state (current: {operation.status}), skipping")
+        return
+
+    # Mark as processing
+    operation.status = "PROCESSING"
+    db.session.commit()
+
     try:
-        op: Operation = db.session.get(Operation, op_id)
-        if not op:
-            raise OperationProcessingError("Operation not found")
-        if op.status not in ("PENDING", "FAILED"):
-            return  # idempotente
+        # Get price from "external" API
+        price = get_asset_price(operation.asset_code)
 
-        op.status = "PROCESSING"
-        db.session.flush()
+        # Calculate values
+        total_value, tax_paid = calculate_operation(
+            price, operation.quantity, operation.operation_type
+        )
 
-        fidc: FidcCash = db.session.get(FidcCash, op.fidc_id)
+        # Update fidc cash
+        fidc = FidcCash.query.get(operation.fidc_id)
         if not fidc:
-            raise OperationProcessingError("FIDC cash record not found")
+            fidc = FidcCash(fidc_id=operation.fidc_id)
+            db.session.add(fidc)
 
-        # Busca preço com retry simples (até 3 tentativas para falha externa, não para rate limit)
-        price = None
-        attempts = 0
-        while attempts < 3:
-            try:
-                price = get_asset_price(op.asset_code)
-                break
-            except RateLimitError as rl:
-                logger.warning(f"Rate limit - requeue? {rl}")
-                raise  # deixa a task lidar
-            except ExternalPriceError as e:
-                attempts += 1
-                logger.warning(f"Tentativa {attempts} falhou: {e}")
-        if price is None:
-            raise OperationProcessingError("Could not fetch price after retries")
-
-        gross_value = op.quantity * price
-
-        if op.operation_type == "BUY":
-            tax_amount = gross_value * 0.005
-            total_cost = gross_value + tax_amount
-            if fidc.available_cash < total_cost:
-                raise OperationProcessingError("Insufficient cash for BUY")
-            fidc.available_cash -= total_cost
-            op.total_value = total_cost
-            op.tax_paid = tax_amount
-
-        elif op.operation_type == "SELL":
-            tax_amount = gross_value * 0.003
-            net_proceeds = gross_value - tax_amount
-            fidc.available_cash += net_proceeds
-            op.total_value = net_proceeds
-            op.tax_paid = tax_amount
-        else:
-            raise OperationProcessingError("Invalid operation_type")
-
-        op.execution_price = price
-        op.status = "COMPLETED"
-
-        db.session.flush()
-        logger.info(f"Operation processed id={op.id} status=COMPLETED fidc_cash={fidc.available_cash}")
-        return op
-    except Exception as e:
-        logger.exception("Error processing operation")
-        db.session.rollback()
-        # Atualiza status se existir
-        op = db.session.get(Operation, op_id)
-        if op:
-            try:
-                op.status = "FAILED"
+        # For BUY operations, we need to check if there's enough cash
+        if operation.operation_type == "BUY":
+            if fidc.available_cash < total_value + tax_paid:
+                logger.error(f"Not enough cash for operation {operation_id}")
+                operation.status = "FAILED"
                 db.session.commit()
-            except SQLAlchemyError:
-                db.session.rollback()
+                return
+
+            fidc.available_cash -= (total_value + tax_paid)
+        else:  # SELL
+            fidc.available_cash += (total_value - tax_paid)
+
+        # Update operation
+        operation.status = "COMPLETED"
+        operation.execution_price = price
+        operation.total_value = total_value
+        operation.tax_paid = tax_paid
+
+        # Update job progress
+        job = ProcessingJob.query.get(operation.job_id)
+        if job:
+            job.processed += 1
+            if job.processed + job.failed >= job.total_operations:
+                job.status = "COMPLETED"
+                job.completed_at = datetime.utcnow()
+
+        db.session.commit()
+        logger.info(f"Operation {operation_id} processed successfully")
+
+    except Exception as e:
+        logger.error(f"Error processing operation {operation_id}: {str(e)}")
+        operation.status = "FAILED"
+
+        # Update job progress for failed operation
+        job = ProcessingJob.query.get(operation.job_id)
+        if job:
+            job.failed += 1
+            if job.processed + job.failed >= job.total_operations:
+                job.status = "COMPLETED"
+                job.completed_at = datetime.utcnow()
+
+        db.session.commit()
         raise
 
 def update_job_progress(job_id: str):

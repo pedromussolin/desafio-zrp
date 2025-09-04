@@ -12,15 +12,18 @@ from .models.fidc_cash import FidcCash
 celery = Celery(__name__)
 
 def init_celery(app: Flask):
+    """Initialize Celery with Flask app configuration"""
     celery.conf.update(
         broker_url=app.config["CELERY_BROKER_URL"],
         result_backend=app.config["CELERY_RESULT_BACKEND"],
         task_track_started=True
     )
-    # Registrar tasks após config
-    from .tasks import operation_tasks  # noqa
+
+    # Registrar tasks após config sem criar dependência circular
+    # NÃO importamos tarefas aqui, em vez disso o worker as importa diretamente
 
 def create_app(config_class=Config):
+    """Create Flask application"""
     app = Flask(__name__)
     app.config.from_object(config_class)
 
@@ -35,8 +38,8 @@ def create_app(config_class=Config):
         format="%(asctime)s | %(levelname)s | %(name)s | %(message)s"
     )
 
-    # Blueprints
-    from .api.routes import api_bp
+    # Blueprints - Importar o blueprint diretamente sem importar routes
+    from .api import api_bp
     app.register_blueprint(api_bp)
 
     init_celery(app)

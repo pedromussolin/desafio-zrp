@@ -1,6 +1,6 @@
 from celery import Celery, shared_task
 from flask import current_app
-from app import create_app, db
+from app import create_app, db, celery
 from app.models.operation import Operation
 from app.models.job import Job
 from app.services.calculation_service import calculate_operation
@@ -44,6 +44,8 @@ def process_operations_batch_task(job_id, ops_ids):
         logger.info(f"Starting batch processing for job_id={job_id}, ops_count={len(ops_ids)}")
         for op_id in ops_ids:
             try:
+                # Importar dentro da função para evitar circular imports
+                from app.services.operation_service import process_single_operation
                 process_single_operation(op_id)
             except Exception as e:
                 logger.error(f"Failed to process operation {op_id}: {str(e)}")

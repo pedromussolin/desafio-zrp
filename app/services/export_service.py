@@ -1,6 +1,7 @@
 import csv
 import io
-from datetime import datetime, timezone
+from datetime import datetime
+import os
 from minio import Minio
 from minio.error import S3Error
 from flask import current_app
@@ -10,56 +11,93 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def _client():
-    return Minio(
-        current_app.config["S3_ENDPOINT"],
-        access_key=current_app.config["S3_ACCESS_KEY"],
-        secret_key=current_app.config["S3_SECRET_KEY"],
-        secure=current_app.config["S3_SECURE"],
-    )
+def export_operations(fidc_id, start_date, end_date):
+    """
+    Export operations to CSV and upload to MinIO
 
-def _ensure_bucket(client, bucket):
-    if not client.bucket_exists(bucket):
-        client.make_bucket(bucket)
+    Args:
+        fidc_id (str): FIDC ID
+        start_date (date): Start date for filtering operations
+        end_date (date): End date for filtering operations
 
-def export_operations(fidc_id: str, start_date, end_date):
-    q = (
-        db.session.query(Operation)
-        .filter(
-            Operation.fidc_id == fidc_id,
-            Operation.operation_date >= start_date,
-            Operation.operation_date <= end_date,
-            Operation.status == "COMPLETED"
-        )
-        .order_by(Operation.operation_date)
-    )
-    rows = q.all()
+    Returns:
+        str: URL to download the exported file
+    """
+    # Query operations
+    operations = Operation.query.filter(
+        Operation.fidc_id == fidc_id,
+        Operation.operation_date >= start_date,
+        Operation.operation_date <= end_date,
+        Operation.status == "COMPLETED"
+    ).all()
 
+    # Create CSV in memory
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["id","fidc_id","asset_code","type","qty","date","price","total","tax"])
-    for r in rows:
+
+    # Write header
+    writer.writerow([
+        "ID", "Asset", "Type", "Date", "Quantity",
+        "Price", "Total Value", "Tax Paid", "Status"
+    ])
+
+    # Write data
+    for op in operations:
         writer.writerow([
-            r.id, r.fidc_id, r.asset_code, r.operation_type, r.quantity,
-            r.operation_date.isoformat(), r.execution_price, r.total_value, r.tax_paid
+            op.id,
+            op.asset_code,
+            op.operation_type,
+            op.operation_date.strftime("%Y-%m-%d"),
+            op.quantity,
+            op.execution_price,
+            op.total_value,
+            op.tax_paid,
+            op.status
         ])
 
-    content = output.getvalue().encode()
-    filename = f"{fidc_id}/export_{fidc_id}_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')}.csv"
+    # Get CSV content
+    csv_content = output.getvalue()
 
-    client = _client()
-    bucket = current_app.config["S3_BUCKET"]
-    _ensure_bucket(client, bucket)
+    # Generate filename
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"{fidc_id}_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}_{timestamp}.csv"
 
-    client.put_object(
-        bucket_name=bucket,
-        object_name=filename,
-        data=io.BytesIO(content),
-        length=len(content),
-        content_type="text/csv"
-    )
+    # Upload to MinIO
+    try:
+        # Connect to MinIO
+        minio_client = Minio(
+            current_app.config["MINIO_ENDPOINT"],
+            access_key=current_app.config["MINIO_ACCESS_KEY"],
+            secret_key=current_app.config["MINIO_SECRET_KEY"],
+            secure=False  # For development (http)
+        )
 
-    # Presigned URL (expira em 1 hora)
-    url = client.get_presigned_url("GET", bucket, filename, expires=3600)
-    logger.info(f"Export uploaded bucket={bucket} object={filename}")
-    return {"filename": filename, "rows": len(rows), "url": url}
+        # Make bucket if not exists
+        bucket_name = current_app.config["MINIO_BUCKET"]
+        if not minio_client.bucket_exists(bucket_name):
+            minio_client.make_bucket(bucket_name)
+
+        # Create object path
+        object_name = f"{fidc_id}/{filename}"
+
+        # Upload CSV
+        csv_bytes = csv_content.encode('utf-8')
+        csv_buffer = io.BytesIO(csv_bytes)
+
+        minio_client.put_object(
+            bucket_name,
+            object_name,
+            data=csv_buffer,
+            length=len(csv_bytes),
+            content_type="text/csv"
+        )
+
+        # Generate URL
+        url = f"http://{current_app.config['MINIO_ENDPOINT']}/{bucket_name}/{object_name}"
+
+        logger.info(f"Exported operations for FIDC {fidc_id} to {url}")
+        return url
+
+    except S3Error as e:
+        logger.error(f"Error uploading to MinIO: {str(e)}")
+        raise Exception("Failed to upload export file")
